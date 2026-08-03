@@ -1,0 +1,19 @@
+{
+  "name": "com.samarthogale.sustainabilityxrtoolkit",
+  "version": "0.1.0",
+  "displayName": "Sustainability XR Toolkit",
+  "description": "A lightweight Unity/C# toolkit for importing real-world sustainability datasets (GHG emissions, water usage, energy generation, etc.) and rendering them as interactive 3D/AR data visualizations.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Samarth Ogale",
+    "email": "sogale@asu.edu"
+  },
+  "keywords": [
+    "sustainability",
+    "xr",
+    "ar",
+    "data-visualization",
+    "csv",
+    "unity-package"
+  ]
+}
