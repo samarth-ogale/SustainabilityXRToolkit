@@ -1,0 +1,8 @@
+Label,Category,Value,Unit,Date
+Crop Production,Agriculture,142.3,MtCO2e,2024-01
+Livestock,Agriculture,98.7,MtCO2e,2024-01
+Soil Management,Agriculture,54.1,MtCO2e,2024-01
+Residential Water Use,Water,3200,MillionGallons,2024-01
+Industrial Water Use,Water,5100,MillionGallons,2024-01
+Solar Generation,Energy,410.6,GWh,2024-01
+Wind Generation,Energy,375.2,GWh,2024-01
