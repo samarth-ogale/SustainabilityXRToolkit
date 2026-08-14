@@ -11,13 +11,14 @@ namespace SustainabilityXRToolkit.Visualization
     /// <summary>
     /// Spawns a simple animated 3D bar-chart visualization for a sustainability dataset,
     /// grouped and color-coded by category (e.g., Energy / Water / Waste), with
-    /// floating category labels.
+    /// floating category labels and per-bar value labels.
     ///
     /// Usage:
     ///   1. Attach this component to an empty GameObject in a scene.
     ///   2. Either assign a SustainabilityDataset asset, OR leave it empty and
     ///      set CsvFilePath to a CSV under Assets/StreamingAssets.
-    ///   3. Press Play — bars grow up out of the ground, clustered by category.
+    ///   3. Press Play — bars grow up out of the ground, clustered by category,
+    ///      each showing its own value once it finishes growing.
     /// </summary>
     public class SustainabilityVisualizer : MonoBehaviour
     {
@@ -36,6 +37,7 @@ namespace SustainabilityXRToolkit.Visualization
         public float HeightScale = 0.5f;
         public float GrowDuration = 0.6f;
         public bool ShowCategoryLabels = true;
+        public bool ShowValueLabels = true;
 
         private readonly List<GameObject> _spawnedVisuals = new List<GameObject>();
 
@@ -115,7 +117,7 @@ namespace SustainabilityXRToolkit.Visualization
                     dataVisual.Initialize(point);
 
                     float targetHeight = Mathf.Max(0.05f, (point.Value / maxValue) * HeightScale * 10f);
-                    StartCoroutine(GrowBar(visual.transform, targetHeight, GrowDuration));
+                    StartCoroutine(GrowBar(visual.transform, targetHeight, GrowDuration, point));
 
                     _spawnedVisuals.Add(visual);
                     cursorX += Spacing;
@@ -153,7 +155,29 @@ namespace SustainabilityXRToolkit.Visualization
             _spawnedVisuals.Add(labelObject);
         }
 
-        private IEnumerator GrowBar(Transform t, float targetHeight, float duration)
+        /// <summary>
+        /// Creates a small floating value label (e.g. "620.4 MWh") just above a
+        /// finished bar, using the same built-in TextMesh approach as category labels.
+        /// </summary>
+        private void CreateValueLabel(SustainabilityDataPoint point, Vector3 barTopPosition)
+        {
+            GameObject labelObject = new GameObject($"ValueLabel_{point.Label}");
+            labelObject.transform.SetParent(transform);
+            labelObject.transform.position = barTopPosition + new Vector3(0f, 0.3f, 0f);
+            labelObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+            TextMesh textMesh = labelObject.AddComponent<TextMesh>();
+            textMesh.text = $"{point.Value:0.#} {point.Unit}";
+            textMesh.fontSize = 32;
+            textMesh.characterSize = 0.09f;
+            textMesh.anchor = TextAnchor.LowerCenter;
+            textMesh.alignment = TextAlignment.Center;
+            textMesh.color = Color.black;
+
+            _spawnedVisuals.Add(labelObject);
+        }
+
+        private IEnumerator GrowBar(Transform t, float targetHeight, float duration, SustainabilityDataPoint point)
         {
             Vector3 startScale = new Vector3(t.localScale.x, 0.01f, t.localScale.z);
             Vector3 endScale = new Vector3(t.localScale.x, targetHeight, t.localScale.z);
@@ -172,7 +196,14 @@ namespace SustainabilityXRToolkit.Visualization
             }
 
             t.localScale = endScale;
-            t.position = new Vector3(startPos.x, endScale.y * 0.5f, startPos.z);
+            Vector3 finalPos = new Vector3(startPos.x, endScale.y * 0.5f, startPos.z);
+            t.position = finalPos;
+
+            if (ShowValueLabels)
+            {
+                Vector3 barTop = new Vector3(startPos.x, endScale.y, startPos.z);
+                CreateValueLabel(point, barTop);
+            }
         }
 
         /// <summary>Removes all currently spawned visuals (e.g., before loading a new dataset).</summary>
