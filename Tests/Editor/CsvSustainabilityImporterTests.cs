@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using SustainabilityXRToolkit.Data;
 using SustainabilityXRToolkit.Import;
 
@@ -43,6 +45,8 @@ namespace SustainabilityXRToolkit.Tests
         [Test]
         public void LoadFromCsv_ReturnsEmptyList_WhenFileMissing()
         {
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(".*File not found.*"));
+
             List<SustainabilityDataPoint> points = CsvSustainabilityImporter.LoadFromCsv("nonexistent_file.csv");
             Assert.AreEqual(0, points.Count);
         }

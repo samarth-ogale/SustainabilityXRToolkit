@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using SustainabilityXRToolkit.Data;
 using SustainabilityXRToolkit.Import;
@@ -8,16 +9,15 @@ using SustainabilityXRToolkit.Import;
 namespace SustainabilityXRToolkit.Visualization
 {
     /// <summary>
-    /// Spawns a simple animated 3D bar-chart visualization for a sustainability dataset.
+    /// Spawns a simple animated 3D bar-chart visualization for a sustainability dataset,
+    /// grouped and color-coded by category (e.g., Energy / Water / Waste), with
+    /// floating category labels.
     ///
     /// Usage:
     ///   1. Attach this component to an empty GameObject in a scene.
     ///   2. Either assign a SustainabilityDataset asset, OR leave it empty and
-    ///      set CsvFilePath to a CSV under Assets/ (e.g. via StreamingAssets).
-    ///   3. Press Play — bars grow up out of the ground, one per data row.
-    ///
-    /// This is deliberately simple (primitive cubes by default) so it's easy to
-    /// read and extend — swap in a custom prefab, add AR placement, etc.
+    ///      set CsvFilePath to a CSV under Assets/StreamingAssets.
+    ///   3. Press Play — bars grow up out of the ground, clustered by category.
     /// </summary>
     public class SustainabilityVisualizer : MonoBehaviour
     {
@@ -32,10 +32,26 @@ namespace SustainabilityXRToolkit.Visualization
         [Tooltip("Optional custom prefab per data point. If left empty, a primitive cube is used.")]
         public GameObject DataPointPrefab;
         public float Spacing = 1.5f;
+        public float ClusterGap = 2.5f;
         public float HeightScale = 0.5f;
         public float GrowDuration = 0.6f;
+        public bool ShowCategoryLabels = true;
 
         private readonly List<GameObject> _spawnedVisuals = new List<GameObject>();
+
+        // Simple, deterministic color palette by category. Falls back to grey for
+        // any category not explicitly listed here, so new categories never break.
+        private static readonly Dictionary<string, Color> CategoryColors = new Dictionary<string, Color>
+        {
+            { "Waste", new Color(0.58f, 0.38f, 0.72f) },       // purple
+            { "Water", new Color(0.25f, 0.50f, 0.85f) },       // blue
+            { "Energy", new Color(0.95f, 0.62f, 0.15f) },      // orange
+        };
+
+        private static Color GetCategoryColor(string category)
+        {
+            return CategoryColors.TryGetValue(category, out Color color) ? color : Color.gray;
+        }
 
         private void Start()
         {
@@ -62,28 +78,79 @@ namespace SustainabilityXRToolkit.Visualization
             }
             if (maxValue <= 0f) maxValue = 1f;
 
-            for (int i = 0; i < points.Count; i++)
+            // Group by category, preserving first-seen order so the layout is stable
+            // and matches the order categories appear in the source CSV.
+            var groups = points
+                .GroupBy(p => p.Category)
+                .OrderBy(g => points.FindIndex(p => p.Category == g.Key));
+
+            float cursorX = 0f;
+
+            foreach (var group in groups)
             {
-                SustainabilityDataPoint point = points[i];
-                Vector3 basePosition = transform.position + new Vector3(i * Spacing, 0f, 0f);
+                float clusterStartX = cursorX;
 
-                GameObject visual = DataPointPrefab != null
-                    ? Instantiate(DataPointPrefab, basePosition, Quaternion.identity, transform)
-                    : GameObject.CreatePrimitive(PrimitiveType.Cube);
+                foreach (SustainabilityDataPoint point in group)
+                {
+                    Vector3 basePosition = transform.position + new Vector3(cursorX, 0f, 0f);
 
-                visual.transform.SetParent(transform);
-                visual.transform.position = basePosition;
-                visual.name = $"DataPoint_{point.Label}";
+                    GameObject visual = DataPointPrefab != null
+                        ? Instantiate(DataPointPrefab, basePosition, Quaternion.identity, transform)
+                        : GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-                DataPointVisual dataVisual = visual.GetComponent<DataPointVisual>();
-                if (dataVisual == null) dataVisual = visual.AddComponent<DataPointVisual>();
-                dataVisual.Initialize(point);
+                    visual.transform.SetParent(transform);
+                    visual.transform.position = basePosition;
+                    visual.name = $"DataPoint_{point.Label}";
 
-                float targetHeight = Mathf.Max(0.05f, (point.Value / maxValue) * HeightScale * 10f);
-                StartCoroutine(GrowBar(visual.transform, targetHeight, GrowDuration));
+                    // Give each bar its own material instance so color changes don't
+                    // affect other bars sharing the same default primitive material.
+                    Renderer renderer = visual.GetComponent<Renderer>();
+                    if (renderer != null)
+                    {
+                        renderer.material.color = GetCategoryColor(point.Category);
+                    }
 
-                _spawnedVisuals.Add(visual);
+                    DataPointVisual dataVisual = visual.GetComponent<DataPointVisual>();
+                    if (dataVisual == null) dataVisual = visual.AddComponent<DataPointVisual>();
+                    dataVisual.Initialize(point);
+
+                    float targetHeight = Mathf.Max(0.05f, (point.Value / maxValue) * HeightScale * 10f);
+                    StartCoroutine(GrowBar(visual.transform, targetHeight, GrowDuration));
+
+                    _spawnedVisuals.Add(visual);
+                    cursorX += Spacing;
+                }
+
+                if (ShowCategoryLabels)
+                {
+                    float clusterCenterX = (clusterStartX + (cursorX - Spacing)) * 0.5f;
+                    CreateCategoryLabel(group.Key, clusterCenterX);
+                }
+
+                cursorX += ClusterGap;
             }
+        }
+
+        /// <summary>
+        /// Creates a simple floating 3D text label above a category cluster using
+        /// Unity's built-in TextMesh (no external package required, unlike TextMeshPro).
+        /// </summary>
+        private void CreateCategoryLabel(string category, float centerX)
+        {
+            GameObject labelObject = new GameObject($"Label_{category}");
+            labelObject.transform.SetParent(transform);
+            labelObject.transform.position = transform.position + new Vector3(centerX, 3.5f, 0f);
+            labelObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f); // face default camera direction
+
+            TextMesh textMesh = labelObject.AddComponent<TextMesh>();
+            textMesh.text = category;
+            textMesh.fontSize = 48;
+            textMesh.characterSize = 0.15f;
+            textMesh.anchor = TextAnchor.MiddleCenter;
+            textMesh.alignment = TextAlignment.Center;
+            textMesh.color = GetCategoryColor(category);
+
+            _spawnedVisuals.Add(labelObject);
         }
 
         private IEnumerator GrowBar(Transform t, float targetHeight, float duration)
